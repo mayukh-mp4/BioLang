@@ -1,0 +1,3 @@
+dna g = "ATGC"
+motif bad = /A(TG/
+print(find_all(bad in g))

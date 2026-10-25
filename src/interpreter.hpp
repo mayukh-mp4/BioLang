@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include "ast.hpp"
+#include "motif.hpp"
 #include "typechecker.hpp"  // for Type
 
 struct Value {
@@ -12,6 +13,7 @@ struct Value {
     double f = 0.0;              // float
     bool b = false;              // bool
     std::vector<long long> list; // list<int>
+    std::shared_ptr<Dfa> dfa;    // compiled motif
 };
 
 struct RuntimeError {

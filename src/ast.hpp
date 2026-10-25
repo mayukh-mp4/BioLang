@@ -37,8 +37,11 @@ struct NumberLit : Expr {
     void print(int d) const override { indent(d); std::cout << "Number " << text << "\n"; }
 };
 
+struct Dfa;  // defined in motif.hpp
+
 struct RegexLit : Expr {
     std::string pattern;
+    mutable std::shared_ptr<Dfa> dfa;  // compiled by the type checker, i.e. at compile time
     RegexLit(std::string p, int l, int c) : Expr(l, c), pattern(std::move(p)) {}
     void print(int d) const override { indent(d); std::cout << "Motif /" << pattern << "/\n"; }
 };

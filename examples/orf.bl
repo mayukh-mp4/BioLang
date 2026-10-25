@@ -1,0 +1,4 @@
+# Find an open reading frame: ATG, at least 10 codons, then a stop codon
+dna genome = "GGATGAAACCCGGGTTTAAACCCGGGTTTAAACCCTAAGG"
+motif orf = /ATG(...){10,}?(TAA|TAG|TGA)/
+print(find_all(orf in genome))

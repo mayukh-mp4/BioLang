@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include "ast.hpp"
+#include "motif.hpp"
 
 enum class Type {
     DNA, RNA, PROTEIN, MOTIF, INT, FLOAT, BOOL,
@@ -18,9 +19,13 @@ public:
     // Returns the list of errors (empty if the program is well-typed).
     std::vector<std::string> check(const Program& program);
 
+    // DFAs compiled from the motif literals of the last checked program.
+    const std::vector<std::shared_ptr<Dfa>>& motifs() const { return motifs_; }
+
 private:
     std::map<std::string, Type> symbols_;
     std::vector<std::string> errors_;
+    std::vector<std::shared_ptr<Dfa>> motifs_;
 
     void error(const Node& at, const std::string& msg);
     void checkStmt(const Stmt& s);

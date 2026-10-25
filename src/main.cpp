@@ -9,16 +9,17 @@
 #include "interpreter.hpp"
 
 int main(int argc, char** argv) {
-    bool tokensOnly = false, showAst = false, checkOnly = false;
+    bool tokensOnly = false, showAst = false, checkOnly = false, showDfa = false;
     const char* path = nullptr;
     for (int i = 1; i < argc; i++) {
         if (std::strcmp(argv[i], "--tokens") == 0) tokensOnly = true;
         else if (std::strcmp(argv[i], "--ast") == 0) showAst = true;
         else if (std::strcmp(argv[i], "--check") == 0) checkOnly = true;
+        else if (std::strcmp(argv[i], "--dfa") == 0) showDfa = true;
         else path = argv[i];
     }
     if (!path) {
-        std::cerr << "usage: biolang [--tokens | --ast | --check] <file.bl>\n";
+        std::cerr << "usage: biolang [--tokens | --ast | --check | --dfa] <file.bl>\n";
         return 1;
     }
 
@@ -62,6 +63,11 @@ int main(int argc, char** argv) {
         for (const auto& e : typeErrors) std::fprintf(stderr, "%s\n", e.c_str());
         std::fprintf(stderr, "\n%zu type error(s)\n", typeErrors.size());
         return 1;
+    }
+    if (showDfa) {
+        for (const auto& m : checker.motifs()) m->dump(std::cout);
+        if (checker.motifs().empty()) std::cout << "(no motifs in this program)\n";
+        return 0;
     }
     if (checkOnly) {
         std::printf("Type check passed (%zu statements)\n", program.stmts.size());

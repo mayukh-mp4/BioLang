@@ -76,6 +76,7 @@ void TypeChecker::error(const Node& at, const std::string& msg) {
 std::vector<std::string> TypeChecker::check(const Program& program) {
     symbols_.clear();
     errors_.clear();
+    motifs_.clear();
     for (const auto& s : program.stmts) checkStmt(*s);
     return errors_;
 }
@@ -132,7 +133,19 @@ void TypeChecker::checkStmt(const Stmt& s) {
 
 Type TypeChecker::typeOf(const Expr& e) {
     if (dynamic_cast<const StringLit*>(&e)) return Type::STRING;
-    if (dynamic_cast<const RegexLit*>(&e))  return Type::MOTIF;
+    if (const auto* r = dynamic_cast<const RegexLit*>(&e)) {
+        // Motifs are compiled to a DFA here, at compile time, before anything runs.
+        try {
+            r->dfa = compileMotif(r->pattern);
+            motifs_.push_back(r->dfa);
+        } catch (const MotifError& m) {
+            errors_.push_back("error at " + std::to_string(r->line) + ":" +
+                              std::to_string(r->col + 1 + static_cast<int>(m.pos)) +
+                              ": invalid motif: " + m.msg);
+            return Type::UNKNOWN;
+        }
+        return Type::MOTIF;
+    }
     if (const auto* n = dynamic_cast<const NumberLit*>(&e))
         return n->text.find('.') != std::string::npos ? Type::FLOAT : Type::INT;
     if (const auto* id = dynamic_cast<const Ident*>(&e)) {

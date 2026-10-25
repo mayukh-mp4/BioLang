@@ -2,7 +2,6 @@
 #include <algorithm>
 #include <cstdio>
 #include <iostream>
-#include <regex>
 #include <sstream>
 
 // ---------- sequence operations ----------
@@ -56,22 +55,6 @@ static double gcContent(const std::string& s) {
     size_t gc = 0;
     for (char c : s) if (c == 'G' || c == 'C') gc++;
     return static_cast<double>(gc) / s.size();
-}
-
-// TEMPORARY motif engine: std::regex. This will be replaced by the
-// Thompson NFA -> subset construction DFA -> single-pass scanner, and
-// kept as the correctness baseline to compare the DFA against.
-static std::vector<long long> findAll(const std::string& pattern, const std::string& seq,
-                                      const Node& at) {
-    std::vector<long long> out;
-    try {
-        std::regex re(pattern);
-        for (std::sregex_iterator it(seq.begin(), seq.end(), re), end; it != end; ++it)
-            out.push_back(static_cast<long long>(it->position()));
-    } catch (const std::regex_error&) {
-        throw RuntimeError{"invalid motif pattern /" + pattern + "/", at.line, at.col};
-    }
-    return out;
 }
 
 // ---------- values ----------
@@ -147,7 +130,11 @@ void Interpreter::exec(const Stmt& s) {
 
 Value Interpreter::eval(const Expr& e) {
     if (const auto* s = dynamic_cast<const StringLit*>(&e)) { Value v; v.type = Type::STRING; v.s = s->value; return v; }
-    if (const auto* r = dynamic_cast<const RegexLit*>(&e))  return makeSeq(Type::MOTIF, r->pattern);
+    if (const auto* r = dynamic_cast<const RegexLit*>(&e)) {
+        Value v = makeSeq(Type::MOTIF, r->pattern);
+        v.dfa = r->dfa ? r->dfa : compileMotif(r->pattern);
+        return v;
+    }
     if (const auto* n = dynamic_cast<const NumberLit*>(&e)) {
         if (n->text.find('.') != std::string::npos) return makeFloat(std::stod(n->text));
         return makeInt(std::stoll(n->text));
@@ -193,7 +180,7 @@ Value Interpreter::evalCall(const Call& c) {
         Value m = eval(*in->needle), s = eval(*in->haystack);
         Value out;
         out.type = Type::LIST_INT;
-        out.list = findAll(m.s, s.s, c);
+        out.list = m.dfa->findAll(s.s);
         return out;
     }
 
