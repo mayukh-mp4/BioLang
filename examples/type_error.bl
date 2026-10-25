@@ -1,0 +1,7 @@
+dna gene = "GTGCATCTGACTCCTGAGGAGAAG"
+protein p = translate(gene)
+dna bad = "ATGU"
+rna mrna = transcribe(gene)
+print(gene == mrna)
+print(missing)
+int n = gc_content(gene)

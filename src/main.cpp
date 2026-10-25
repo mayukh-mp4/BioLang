@@ -5,16 +5,18 @@
 #include <sstream>
 #include "lexer.hpp"
 #include "parser.hpp"
+#include "typechecker.hpp"
 
 int main(int argc, char** argv) {
-    bool tokensOnly = false;
+    bool tokensOnly = false, showAst = false;
     const char* path = nullptr;
     for (int i = 1; i < argc; i++) {
         if (std::strcmp(argv[i], "--tokens") == 0) tokensOnly = true;
+        else if (std::strcmp(argv[i], "--ast") == 0) showAst = true;
         else path = argv[i];
     }
     if (!path) {
-        std::cerr << "usage: biolang [--tokens] <file.bl>\n";
+        std::cerr << "usage: biolang [--tokens | --ast] <file.bl>\n";
         return 1;
     }
 
@@ -49,6 +51,16 @@ int main(int argc, char** argv) {
         for (const auto& e : parser.errors()) std::fprintf(stderr, "%s\n", e.c_str());
         return 1;
     }
-    program.print();
+    if (showAst) { program.print(); return 0; }
+
+    // 3. Type checking
+    TypeChecker checker;
+    std::vector<std::string> typeErrors = checker.check(program);
+    if (!typeErrors.empty()) {
+        for (const auto& e : typeErrors) std::fprintf(stderr, "%s\n", e.c_str());
+        std::fprintf(stderr, "\n%zu type error(s)\n", typeErrors.size());
+        return 1;
+    }
+    std::printf("Type check passed (%zu statements)\n", program.stmts.size());
     return 0;
 }
