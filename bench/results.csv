@@ -1,0 +1,7 @@
+genome,bp,pattern,matches,python_ms,biolang_ms,dfa_build_ms
+ecoli.fa,4641652,GAATTC,646,11.77,16.452,0.071
+ecoli.fa,4641652,TATA[AT]A[AT],908,10.653,14.491,0.065
+ecoli.fa,4641652,[CG]{8},11533,67.899,27.05,0.068
+ecoli.fa,4641652,GC.{10}GC,31564,23.201,20.851,0.096
+ecoli.fa,4641652,"ATG(...){10,}?(TAA|TAG|TGA)",17270,43.118,12.782,0.291
+ecoli.fa,4641652,"ATG(...){30,}?(TAA|TAG|TGA)",13559,40.671,12.397,1.121

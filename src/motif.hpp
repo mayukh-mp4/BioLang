@@ -22,6 +22,7 @@ struct Dfa {
     std::vector<int> trans;                     // numStates * numClasses, -1 = dead
     std::vector<char> accepting;
     int start = 0;
+    std::array<char, 256> startByte{};          // bytes that can begin a match
     size_t nfaStates = 0;
     size_t dfaStatesRaw = 0;                    // before minimisation
 

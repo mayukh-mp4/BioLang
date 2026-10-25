@@ -1,0 +1,6 @@
+# Run from the project root so the relative path resolves
+dna g = load_fasta("examples/sample.fa")
+print(len(g))
+print(translate(transcribe(g)))
+motif m = /GAG/
+print(count(find_all(m in g)))

@@ -63,6 +63,8 @@ static const std::map<std::string, Sig>& builtins() {
         {"revcomp",    {{Type::DNA}, Type::DNA, ""}},
         {"gc_content", {{Type::DNA, Type::RNA}, Type::FLOAT, ""}},
         {"len",        {{Type::DNA, Type::RNA, Type::PROTEIN}, Type::INT, ""}},
+        {"load_fasta", {{Type::STRING}, Type::DNA, ""}},
+        {"count",      {{Type::LIST_INT}, Type::INT, ""}},
     };
     return table;
 }

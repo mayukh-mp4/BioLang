@@ -1,5 +1,8 @@
 #include "interpreter.hpp"
 #include <algorithm>
+#include <cctype>
+#include <chrono>
+#include <fstream>
 #include <cstdio>
 #include <iostream>
 #include <sstream>
@@ -32,6 +35,7 @@ static std::string translate(const std::string& rna) {
     std::string p;
     for (size_t i = 0; i + 2 < rna.size(); i += 3) {
         int a = baseIndex(rna[i]), b = baseIndex(rna[i + 1]), c = baseIndex(rna[i + 2]);
+        if (a < 0 || b < 0 || c < 0) { p += 'X'; continue; }  // ambiguous base (e.g. N)
         p += CODON_TABLE[16 * a + 4 * b + c];
     }
     return p;
@@ -45,7 +49,15 @@ static std::string revcomp(const std::string& dna) {
             case 'T': c = 'A'; break;
             case 'C': c = 'G'; break;
             case 'G': c = 'C'; break;
-        }
+            case 'R': c = 'Y'; break;
+            case 'Y': c = 'R'; break;
+            case 'K': c = 'M'; break;
+            case 'M': c = 'K'; break;
+            case 'B': c = 'V'; break;
+            case 'V': c = 'B'; break;
+            case 'D': c = 'H'; break;
+            case 'H': c = 'D'; break;
+        }  // S, W and N are their own complements
     }
     return r;
 }
@@ -55,6 +67,37 @@ static double gcContent(const std::string& s) {
     size_t gc = 0;
     for (char c : s) if (c == 'G' || c == 'C') gc++;
     return static_cast<double>(gc) / s.size();
+}
+
+
+// Reads the FIRST record of a FASTA file. Letters are upper-cased; IUPAC ambiguity
+// codes (N, R, Y, ...) are kept, anything else is a runtime error.
+static std::string loadFasta(const std::string& path, const Node& at) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in) throw RuntimeError{"cannot open FASTA file '" + path + "'", at.line, at.col};
+    static const std::string allowed = "ACGTNRYKMSWBDHV";
+    std::string line, seq;
+    bool inRecord = false;
+    while (std::getline(in, line)) {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (line.empty() || line[0] == ';') continue;
+        if (line[0] == '>') {
+            if (inRecord) break;  // second record: stop
+            inRecord = true;
+            continue;
+        }
+        inRecord = true;
+        for (char ch : line) {
+            if (ch == ' ') continue;
+            char u = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+            if (allowed.find(u) == std::string::npos)
+                throw RuntimeError{std::string("invalid character '") + ch + "' in FASTA file '" + path + "'",
+                                   at.line, at.col};
+            seq += u;
+        }
+    }
+    if (seq.empty()) throw RuntimeError{"no sequence found in '" + path + "'", at.line, at.col};
+    return seq;
 }
 
 // ---------- values ----------
@@ -180,11 +223,15 @@ Value Interpreter::evalCall(const Call& c) {
         Value m = eval(*in->needle), s = eval(*in->haystack);
         Value out;
         out.type = Type::LIST_INT;
+        auto t0 = std::chrono::steady_clock::now();
         out.list = m.dfa->findAll(s.s);
+        scanSeconds_ += std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
         return out;
     }
 
     Value a = eval(*c.args[0]);
+    if (f == "load_fasta") return makeSeq(Type::DNA, loadFasta(a.s, c));
+    if (f == "count")      return makeInt(static_cast<long long>(a.list.size()));
     if (f == "transcribe") return makeSeq(Type::RNA, transcribe(a.s));
     if (f == "translate")  return makeSeq(Type::PROTEIN, translate(a.s));
     if (f == "revcomp")    return makeSeq(Type::DNA, revcomp(a.s));

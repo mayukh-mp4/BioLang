@@ -419,6 +419,8 @@ std::shared_ptr<Dfa> compileMotif(const std::string& pattern) {
         }
     }
     dfa->start = 0;
+    for (int b = 0; b < 256; b++)
+        dfa->startByte[b] = dfa->trans[dfa->start * K + dfa->classMap[b]] >= 0;
     return dfa;
 }
 
@@ -434,6 +436,9 @@ std::vector<long long> Dfa::findAll(const std::string& seq) const {
     const int K = numClasses;
     size_t i = 0;
     while (i < n) {
+        // Fast skip over bytes that cannot start a match.
+        while (i < n && !startByte[static_cast<unsigned char>(seq[i])]) i++;
+        if (i >= n) break;
         int state = start;
         size_t j = i;
         long long lastEnd = -1;

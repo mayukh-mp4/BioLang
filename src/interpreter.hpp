@@ -26,8 +26,12 @@ public:
     // Runs a type-checked program. Returns false on a runtime error.
     bool run(const Program& program);
 
+    // Total time spent inside find_all scans (for --time / benchmarks).
+    double scanSeconds() const { return scanSeconds_; }
+
 private:
     std::map<std::string, Value> env_;
+    double scanSeconds_ = 0.0;
 
     void exec(const Stmt& s);
     Value eval(const Expr& e);
