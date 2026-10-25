@@ -1,0 +1,5 @@
+# BioLang demo: central dogma
+dna gene = "GTGCATCTGACTCCTGAGGAGAAG"
+rna mrna = transcribe(gene)
+protein p = translate(mrna)
+print(p)
