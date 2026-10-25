@@ -6,17 +6,19 @@
 #include "lexer.hpp"
 #include "parser.hpp"
 #include "typechecker.hpp"
+#include "interpreter.hpp"
 
 int main(int argc, char** argv) {
-    bool tokensOnly = false, showAst = false;
+    bool tokensOnly = false, showAst = false, checkOnly = false;
     const char* path = nullptr;
     for (int i = 1; i < argc; i++) {
         if (std::strcmp(argv[i], "--tokens") == 0) tokensOnly = true;
         else if (std::strcmp(argv[i], "--ast") == 0) showAst = true;
+        else if (std::strcmp(argv[i], "--check") == 0) checkOnly = true;
         else path = argv[i];
     }
     if (!path) {
-        std::cerr << "usage: biolang [--tokens | --ast] <file.bl>\n";
+        std::cerr << "usage: biolang [--tokens | --ast | --check] <file.bl>\n";
         return 1;
     }
 
@@ -61,6 +63,12 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "\n%zu type error(s)\n", typeErrors.size());
         return 1;
     }
-    std::printf("Type check passed (%zu statements)\n", program.stmts.size());
-    return 0;
+    if (checkOnly) {
+        std::printf("Type check passed (%zu statements)\n", program.stmts.size());
+        return 0;
+    }
+
+    // 4. Execution
+    Interpreter interpreter;
+    return interpreter.run(program) ? 0 : 1;
 }

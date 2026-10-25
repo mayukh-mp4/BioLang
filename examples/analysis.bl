@@ -1,0 +1,11 @@
+# Sequence analysis walkthrough
+dna gene = "GTGCATCTGACTCCTGAGGAGAAG"
+print(len(gene))
+print(gc_content(gene))
+print(revcomp(gene))
+rna mrna = transcribe(gene)
+print(mrna)
+protein p = translate(mrna)
+print(p)
+motif m = /GAG/
+print(find_all(m in gene))
