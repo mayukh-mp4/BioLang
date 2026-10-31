@@ -7,6 +7,7 @@ static const std::unordered_map<std::string, TokType> KEYWORDS = {
     {"protein", TokType::KW_PROTEIN}, {"motif", TokType::KW_MOTIF},
     {"int", TokType::KW_INT},     {"float", TokType::KW_FLOAT},
     {"bool", TokType::KW_BOOL},   {"in", TokType::KW_IN},
+    {"string", TokType::KW_STRING},
     {"if", TokType::KW_IF},       {"else", TokType::KW_ELSE},
     {"for", TokType::KW_FOR},     {"print", TokType::KW_PRINT},
 };
@@ -132,6 +133,9 @@ Token Lexer::next() {
         case '}': advance(); return make(TokType::RBRACE, "}", line, col);
         case '(': advance(); return make(TokType::LPAREN, "(", line, col);
         case ')': advance(); return make(TokType::RPAREN, ")", line, col);
+        case '[': advance(); return make(TokType::LBRACKET, "[", line, col);
+        case ']': advance(); return make(TokType::RBRACKET, "]", line, col);
+        case ':': advance(); return make(TokType::COLON,  ":", line, col);
         case ',': advance(); return make(TokType::COMMA,  ",", line, col);
     }
 

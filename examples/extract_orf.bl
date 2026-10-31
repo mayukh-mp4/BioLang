@@ -1,0 +1,11 @@
+# Find every ORF, cut it out of the genome and translate it.
+dna genome = "CCATGAAATTTGGGCCCAAATTTGGGCCCAAATTTGGGTAACCATGGCCGCCGCCGCCGCCGCCGCCGCCGCCGCCGCCGCCTGATT"
+motif orf = /ATG(<sense>){10,}<stop>/
+for p in find_all(orf in genome) {
+    int e = match_end(orf in genome, p)
+    dna gene = genome[p:e]
+    print("ORF")
+    print(p)
+    print(e)
+    print(translate(transcribe(gene)))
+}

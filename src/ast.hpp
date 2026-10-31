@@ -79,6 +79,29 @@ struct Call : Expr {
     }
 };
 
+// list[i]
+struct Index : Expr {
+    ExprPtr base, idx;
+    Index(ExprPtr b, ExprPtr i, int l, int c) : Expr(l, c), base(std::move(b)), idx(std::move(i)) {}
+    void print(int d) const override {
+        indent(d); std::cout << "Index\n";
+        base->print(d + 1); idx->print(d + 1);
+    }
+};
+
+// seq[lo:hi]  (0-based, hi exclusive; either bound may be omitted)
+struct Slice : Expr {
+    ExprPtr base, lo, hi;
+    Slice(ExprPtr b, ExprPtr l_, ExprPtr h, int l, int c)
+        : Expr(l, c), base(std::move(b)), lo(std::move(l_)), hi(std::move(h)) {}
+    void print(int d) const override {
+        indent(d); std::cout << "Slice\n";
+        base->print(d + 1);
+        if (lo) lo->print(d + 1); else { indent(d + 1); std::cout << "(start)\n"; }
+        if (hi) hi->print(d + 1); else { indent(d + 1); std::cout << "(end)\n"; }
+    }
+};
+
 // ---------- statements ----------
 struct VarDecl : Stmt {
     TokType type;

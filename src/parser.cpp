@@ -4,7 +4,7 @@
 static bool isTypeKeyword(TokType t) {
     return t == TokType::KW_DNA || t == TokType::KW_RNA || t == TokType::KW_PROTEIN ||
            t == TokType::KW_MOTIF || t == TokType::KW_INT || t == TokType::KW_FLOAT ||
-           t == TokType::KW_BOOL;
+           t == TokType::KW_BOOL || t == TokType::KW_STRING;
 }
 
 static std::string describe(const Token& t) {
@@ -166,14 +166,33 @@ ExprPtr Parser::parseAdditive() {
 }
 
 ExprPtr Parser::parseTerm() {
-    ExprPtr left = parsePrimary();
+    ExprPtr left = parsePostfix();
     while (check(TokType::STAR) || check(TokType::SLASH)) {
         Token op = advance();
-        ExprPtr right = parsePrimary();
+        ExprPtr right = parsePostfix();
         left = std::make_unique<Binary>(op.lexeme, std::move(left), std::move(right),
                                         op.line, op.col);
     }
     return left;
+}
+
+// postfix = primary { "[" expr "]" | "[" [expr] ":" [expr] "]" }
+ExprPtr Parser::parsePostfix() {
+    ExprPtr e = parsePrimary();
+    while (check(TokType::LBRACKET)) {
+        Token br = advance();
+        ExprPtr lo, hi;
+        if (!check(TokType::COLON)) lo = parseExpr();
+        if (match(TokType::COLON)) {
+            if (!check(TokType::RBRACKET)) hi = parseExpr();
+            expect(TokType::RBRACKET, "']'");
+            e = std::make_unique<Slice>(std::move(e), std::move(lo), std::move(hi), br.line, br.col);
+        } else {
+            expect(TokType::RBRACKET, "']' or ':'");
+            e = std::make_unique<Index>(std::move(e), std::move(lo), br.line, br.col);
+        }
+    }
+    return e;
 }
 
 ExprPtr Parser::parsePrimary() {

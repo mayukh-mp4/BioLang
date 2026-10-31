@@ -34,6 +34,7 @@ private:
     ExprPtr parseExpr();
     ExprPtr parseAdditive();
     ExprPtr parseTerm();
+    ExprPtr parsePostfix();
     ExprPtr parsePrimary();
     ExprPtr parseCall(const Token& name);
 };

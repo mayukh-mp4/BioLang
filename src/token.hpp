@@ -3,14 +3,14 @@
 
 enum class TokType {
     // type keywords
-    KW_DNA, KW_RNA, KW_PROTEIN, KW_MOTIF, KW_INT, KW_FLOAT, KW_BOOL,
+    KW_DNA, KW_RNA, KW_PROTEIN, KW_MOTIF, KW_INT, KW_FLOAT, KW_BOOL, KW_STRING,
     // other keywords
     KW_IN, KW_IF, KW_ELSE, KW_FOR, KW_PRINT,
     // literals / names
     IDENT, STRING, NUMBER, REGEX,
     // operators and punctuation
     ASSIGN, PLUS, MINUS, STAR, SLASH, EQ, NE, LT, GT, LE, GE,
-    LPAREN, RPAREN, LBRACE, RBRACE, COMMA, NEWLINE,
+    LPAREN, RPAREN, LBRACE, RBRACE, LBRACKET, RBRACKET, COLON, COMMA, NEWLINE,
     // special
     END, ERROR
 };
@@ -31,6 +31,7 @@ inline const char* tokName(TokType t) {
         case TokType::KW_INT:     return "KW_INT";
         case TokType::KW_FLOAT:   return "KW_FLOAT";
         case TokType::KW_BOOL:    return "KW_BOOL";
+        case TokType::KW_STRING:  return "KW_STRING";
         case TokType::KW_IN:      return "KW_IN";
         case TokType::KW_IF:      return "KW_IF";
         case TokType::KW_ELSE:    return "KW_ELSE";
@@ -55,6 +56,9 @@ inline const char* tokName(TokType t) {
         case TokType::RBRACE:     return "RBRACE";
         case TokType::LPAREN:     return "LPAREN";
         case TokType::RPAREN:     return "RPAREN";
+        case TokType::LBRACKET:   return "LBRACKET";
+        case TokType::RBRACKET:   return "RBRACKET";
+        case TokType::COLON:      return "COLON";
         case TokType::COMMA:      return "COMMA";
         case TokType::NEWLINE:    return "NEWLINE";
         case TokType::END:        return "END";

@@ -30,6 +30,7 @@ static Type typeFromToken(TokType t) {
         case TokType::KW_INT:     return Type::INT;
         case TokType::KW_FLOAT:   return Type::FLOAT;
         case TokType::KW_BOOL:    return Type::BOOL;
+        case TokType::KW_STRING:  return Type::STRING;
         default:                  return Type::UNKNOWN;
     }
 }
@@ -62,7 +63,7 @@ static const std::map<std::string, Sig>& builtins() {
         {"translate",  {{Type::RNA}, Type::PROTEIN, "use transcribe() on the dna first"}},
         {"revcomp",    {{Type::DNA}, Type::DNA, ""}},
         {"gc_content", {{Type::DNA, Type::RNA}, Type::FLOAT, ""}},
-        {"len",        {{Type::DNA, Type::RNA, Type::PROTEIN}, Type::INT, ""}},
+        {"len",        {{Type::DNA, Type::RNA, Type::PROTEIN, Type::STRING}, Type::INT, ""}},
         {"load_fasta", {{Type::STRING}, Type::DNA, ""}},
         {"count",      {{Type::LIST_INT}, Type::INT, ""}},
     };
@@ -103,7 +104,11 @@ void TypeChecker::checkInit(Type target, const Expr& e, const std::string& varNa
     if (t == Type::UNKNOWN || t == target) return;
     if (target == Type::FLOAT && t == Type::INT) return;  // widening
     if (t == Type::STRING && isSeq(target)) {
-        if (const auto* lit = dynamic_cast<const StringLit*>(&e)) checkAlphabet(target, *lit);
+        // Only a literal can be checked against the alphabet at compile time.
+        if (const auto* lit = dynamic_cast<const StringLit*>(&e)) { checkAlphabet(target, *lit); return; }
+        error(e, std::string("cannot assign string variable to ") + typeName(target) +
+                     " variable '" + varName + "' (only a string literal converts to " +
+                     typeName(target) + ")");
         return;
     }
     error(e, std::string("cannot assign ") + typeName(t) + " to " + typeName(target) +
@@ -181,6 +186,29 @@ Type TypeChecker::typeOf(const Expr& e) {
         return it->second;
     }
     if (const auto* b = dynamic_cast<const Binary*>(&e)) return typeOfBinary(*b);
+    if (const auto* ix = dynamic_cast<const Index*>(&e)) {
+        Type bt = typeOf(*ix->base), it = typeOf(*ix->idx);
+        if (it != Type::UNKNOWN && it != Type::INT)
+            error(*ix->idx, std::string("index must be int, got ") + typeName(it));
+        if (bt == Type::UNKNOWN) return Type::UNKNOWN;
+        if (bt == Type::LIST_INT) return Type::INT;
+        error(*ix, std::string("cannot index ") + typeName(bt) +
+                       (isSeq(bt) || bt == Type::STRING ? " (use a slice, e.g. s[i:i+1])" : ""));
+        return Type::UNKNOWN;
+    }
+    if (const auto* sl = dynamic_cast<const Slice*>(&e)) {
+        Type bt = typeOf(*sl->base);
+        for (const Expr* bound : {sl->lo.get(), sl->hi.get()}) {
+            if (!bound) continue;
+            Type t = typeOf(*bound);
+            if (t != Type::UNKNOWN && t != Type::INT)
+                error(*bound, std::string("slice bound must be int, got ") + typeName(t));
+        }
+        if (bt == Type::UNKNOWN) return Type::UNKNOWN;
+        if (isSeq(bt) || bt == Type::STRING) return bt;
+        error(*sl, std::string("cannot slice ") + typeName(bt) + " (expected dna, rna, protein or string)");
+        return Type::UNKNOWN;
+    }
     if (const auto* c = dynamic_cast<const Call*>(&e))   return typeOfCall(*c);
     if (const auto* in = dynamic_cast<const InExpr*>(&e)) {
         typeOf(*in->needle);
@@ -198,6 +226,7 @@ Type TypeChecker::typeOfBinary(const Binary& b) {
     const std::string& op = b.op;
     std::string pair = std::string(typeName(l)) + " and " + typeName(r);
 
+    if (op == "+" && l == r && (isSeq(l) || l == Type::STRING)) return l;  // concatenation
     if (op == "+" || op == "-" || op == "*" || op == "/") {
         if (isNumeric(l) && isNumeric(r))
             return (l == Type::FLOAT || r == Type::FLOAT) ? Type::FLOAT : Type::INT;
@@ -231,6 +260,24 @@ Type TypeChecker::typeOfCall(const Call& c) {
         if (s != Type::UNKNOWN && !isSeq(s))
             error(*in->haystack, std::string("find_all() expects dna, rna or protein after 'in', got ") + typeName(s));
         return Type::LIST_INT;
+    }
+
+    // match_end(motif in sequence, pos): end (exclusive) of the match that starts at pos, or -1
+    if (c.callee == "match_end") {
+        const InExpr* in = c.args.size() == 2 ? dynamic_cast<const InExpr*>(c.args[0].get()) : nullptr;
+        if (!in) {
+            for (const auto& a : c.args) typeOf(*a);
+            error(c, "match_end() expects: match_end(motif in sequence, position)");
+            return Type::INT;
+        }
+        Type m = typeOf(*in->needle), s = typeOf(*in->haystack), p = typeOf(*c.args[1]);
+        if (m != Type::UNKNOWN && m != Type::MOTIF)
+            error(*in->needle, std::string("match_end() expects a motif before 'in', got ") + typeName(m));
+        if (s != Type::UNKNOWN && !isSeq(s))
+            error(*in->haystack, std::string("match_end() expects dna, rna or protein after 'in', got ") + typeName(s));
+        if (p != Type::UNKNOWN && p != Type::INT)
+            error(*c.args[1], std::string("match_end() position must be int, got ") + typeName(p));
+        return Type::INT;
     }
 
     auto it = builtins().find(c.callee);

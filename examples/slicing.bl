@@ -1,0 +1,14 @@
+dna d = "ACGTACGTTT"
+print(d[0:4])
+print(d[4:])
+print(d[:3])
+print(d[2:5] + d[0:2])
+string name = "gene1"
+print(name)
+print(len(name))
+print(name[0:4])
+int n = len(d[2:8])
+print(n)
+motif m = /ACG/
+int first = find_all(m in d)[1]
+print(first)

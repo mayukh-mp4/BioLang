@@ -154,6 +154,7 @@ static Type declaredType(TokType t) {
         case TokType::KW_MOTIF:   return Type::MOTIF;
         case TokType::KW_INT:     return Type::INT;
         case TokType::KW_FLOAT:   return Type::FLOAT;
+        case TokType::KW_STRING:  return Type::STRING;
         default:                  return Type::BOOL;
     }
 }
@@ -193,6 +194,23 @@ Value Interpreter::eval(const Expr& e) {
     }
     if (const auto* id = dynamic_cast<const Ident*>(&e)) return env_.at(id->name);
     if (const auto* b = dynamic_cast<const Binary*>(&e)) return evalBinary(*b);
+    if (const auto* ix = dynamic_cast<const Index*>(&e)) {
+        Value base = eval(*ix->base), k = eval(*ix->idx);
+        if (k.i < 0 || k.i >= static_cast<long long>(base.list.size()))
+            throw RuntimeError{"index " + std::to_string(k.i) + " out of range (list has " +
+                               std::to_string(base.list.size()) + " items)", ix->line, ix->col};
+        return makeInt(base.list[static_cast<size_t>(k.i)]);
+    }
+    if (const auto* sl = dynamic_cast<const Slice*>(&e)) {
+        Value base = eval(*sl->base);
+        long long n = static_cast<long long>(base.s.size());
+        long long lo = sl->lo ? eval(*sl->lo).i : 0;
+        long long hi = sl->hi ? eval(*sl->hi).i : n;
+        if (lo < 0 || hi < 0 || lo > n || hi > n || lo > hi)
+            throw RuntimeError{"slice [" + std::to_string(lo) + ":" + std::to_string(hi) +
+                               "] out of range (length " + std::to_string(n) + ")", sl->line, sl->col};
+        return makeSeq(base.type, base.s.substr(static_cast<size_t>(lo), static_cast<size_t>(hi - lo)));
+    }
     if (const auto* c = dynamic_cast<const Call*>(&e))   return evalCall(*c);
     throw RuntimeError{"cannot evaluate expression", e.line, e.col};
 }
@@ -211,6 +229,8 @@ Value Interpreter::evalBinary(const Binary& b) {
     if (op == ">")  return makeBool(toD(l) > toD(r));
     if (op == "<=") return makeBool(toD(l) <= toD(r));
     if (op == ">=") return makeBool(toD(l) >= toD(r));
+
+    if (op == "+" && !isNum(l)) return makeSeq(l.type, l.s + r.s);  // sequence / string concatenation
 
     if (l.type == Type::INT && r.type == Type::INT) {
         if (op == "+") return makeInt(l.i + r.i);
@@ -239,6 +259,14 @@ Value Interpreter::evalCall(const Call& c) {
         out.list = m.dfa->findAll(s.s);
         scanSeconds_ += std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
         return out;
+    }
+
+    if (f == "match_end") {
+        const auto* in = static_cast<const InExpr*>(c.args[0].get());
+        Value m = eval(*in->needle), s = eval(*in->haystack), p = eval(*c.args[1]);
+        if (p.i < 0 || p.i > static_cast<long long>(s.s.size()))
+            throw RuntimeError{"match_end position " + std::to_string(p.i) + " out of range", c.line, c.col};
+        return makeInt(m.dfa->matchEnd(s.s, static_cast<size_t>(p.i)));
     }
 
     Value a = eval(*c.args[0]);
