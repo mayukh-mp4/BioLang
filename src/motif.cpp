@@ -1,6 +1,7 @@
 #include "motif.hpp"
 #include <algorithm>
 #include <cstdio>
+#include <cstdint>
 #include <map>
 #include <ostream>
 #include <unordered_map>
@@ -313,21 +314,147 @@ private:
 // ============================================================
 // 3. Subset construction + minimisation
 // ============================================================
-std::vector<int> closure(const std::vector<NState>& st, const std::vector<int>& seeds) {
-    std::vector<char> seen(st.size(), 0);
+// A generic NFA view, so the same code builds the forward and the reverse automaton.
+struct Nfa {
+    std::vector<std::vector<int>> eps;
+    std::vector<std::vector<std::pair<int, const std::bitset<256>*>>> ch;  // outgoing character edges
+    int start = 0, accept = 0;
+};
+
+struct RawDfa {
+    std::vector<int> trans;  // numStates * K, -1 = dead
+    std::vector<char> acc;
+    int numStates() const { return static_cast<int>(acc.size()); }
+};
+
+Nfa forwardNfa(const std::vector<NState>& st, const Frag& f) {
+    Nfa n;
+    n.eps.resize(st.size());
+    n.ch.resize(st.size());
+    for (size_t s = 0; s < st.size(); s++) {
+        n.eps[s] = st[s].eps;
+        if (st[s].isChar) n.ch[s].push_back({st[s].to, &st[s].chars});
+    }
+    n.start = f.start;
+    n.accept = f.end;
+    return n;
+}
+
+// Every edge reversed; the old accept state becomes the start state and vice versa.
+Nfa reverseNfa(const std::vector<NState>& st, const Frag& f) {
+    Nfa n;
+    n.eps.resize(st.size());
+    n.ch.resize(st.size());
+    for (size_t s = 0; s < st.size(); s++) {
+        for (int t : st[s].eps) n.eps[t].push_back(static_cast<int>(s));
+        if (st[s].isChar) n.ch[st[s].to].push_back({static_cast<int>(s), &st[s].chars});
+    }
+    n.start = f.end;
+    n.accept = f.start;
+    return n;
+}
+
+std::vector<int> closure(const std::vector<std::vector<int>>& eps, const std::vector<int>& seeds) {
+    std::vector<char> seen(eps.size(), 0);
     std::vector<int> stack, out;
     for (int s : seeds) if (!seen[s]) { seen[s] = 1; stack.push_back(s); }
     while (!stack.empty()) {
         int s = stack.back();
         stack.pop_back();
         out.push_back(s);
-        for (int t : st[s].eps) if (!seen[t]) { seen[t] = 1; stack.push_back(t); }
+        for (int t : eps[s]) if (!seen[t]) { seen[t] = 1; stack.push_back(t); }
     }
     std::sort(out.begin(), out.end());
     return out;
 }
 
 const size_t MAX_DFA_STATES = 50000;
+const size_t REVERSE_DFA_CAP = 20000;  // the reverse DFA is only an optimisation, so give up sooner
+
+// Subset construction over alphabet classes. With `unanchored`, the start state is re-entered
+// after every character, so the DFA recognises "any suffix of the input is a match".
+RawDfa subsetConstruct(const Nfa& nfa, const std::vector<int>& reps, bool unanchored, size_t cap) {
+    const int K = static_cast<int>(reps.size());
+    std::map<std::vector<int>, int> ids;
+    std::vector<std::vector<int>> subsets;
+    auto addState = [&](const std::vector<int>& s) {
+        auto it = ids.find(s);
+        if (it != ids.end()) return it->second;
+        int id = static_cast<int>(subsets.size());
+        ids.emplace(s, id);
+        subsets.push_back(s);
+        return id;
+    };
+    addState(closure(nfa.eps, {nfa.start}));
+
+    RawDfa out;
+    for (size_t i = 0; i < subsets.size(); i++) {
+        if (subsets.size() > cap)
+            throw MotifError{"pattern too complex: DFA exceeds " + std::to_string(cap) + " states", 0};
+        std::vector<int> cur = subsets[i];
+        for (int c = 0; c < K; c++) {
+            std::vector<int> moved;
+            for (int s : cur)
+                for (const auto& e : nfa.ch[s])
+                    if ((*e.second)[reps[c]]) moved.push_back(e.first);
+            if (unanchored) moved.push_back(nfa.start);
+            out.trans.push_back(moved.empty() ? -1 : addState(closure(nfa.eps, moved)));
+        }
+    }
+    out.acc.resize(subsets.size());
+    for (size_t i = 0; i < subsets.size(); i++)
+        out.acc[i] = std::binary_search(subsets[i].begin(), subsets[i].end(), nfa.accept);
+    return out;
+}
+
+// Moore partition refinement. The result is renumbered in BFS order, so the start state is 0.
+RawDfa minimise(const RawDfa& d, int K) {
+    const int n = d.numStates();
+    std::vector<int> cls(n);
+    for (int i = 0; i < n; i++) cls[i] = d.acc[i] ? 1 : 0;
+    size_t count = 0;
+    while (true) {
+        std::map<std::vector<int>, int> sigIds;
+        std::vector<int> next(n);
+        for (int i = 0; i < n; i++) {
+            std::vector<int> sig(K + 1);
+            sig[0] = cls[i];
+            for (int c = 0; c < K; c++) {
+                int t = d.trans[i * K + c];
+                sig[c + 1] = t < 0 ? -1 : cls[t];
+            }
+            next[i] = sigIds.emplace(sig, static_cast<int>(sigIds.size())).first->second;
+        }
+        cls = next;
+        if (sigIds.size() == count) break;
+        count = sigIds.size();
+    }
+
+    std::vector<int> repState(count, -1);
+    for (int i = 0; i < n; i++) if (repState[cls[i]] < 0) repState[cls[i]] = i;
+    std::vector<int> newId(count, -1), order;
+    newId[cls[0]] = 0;
+    order.push_back(cls[0]);
+    for (size_t q = 0; q < order.size(); q++) {
+        int rep = repState[order[q]];
+        for (int c = 0; c < K; c++) {
+            int t = d.trans[rep * K + c];
+            if (t < 0) continue;
+            int tc = cls[t];
+            if (newId[tc] < 0) { newId[tc] = static_cast<int>(order.size()); order.push_back(tc); }
+        }
+    }
+    RawDfa out;
+    for (int cl : order) {
+        int rep = repState[cl];
+        out.acc.push_back(d.acc[rep]);
+        for (int c = 0; c < K; c++) {
+            int t = d.trans[rep * K + c];
+            out.trans.push_back(t < 0 ? -1 : newId[cls[t]]);
+        }
+    }
+    return out;
+}
 
 }  // namespace
 
@@ -363,125 +490,134 @@ std::shared_ptr<Dfa> compileMotif(const std::string& pattern) {
     const int K = static_cast<int>(reps.size());
     dfa->numClasses = K;
 
-    // --- subset construction ---
-    std::map<std::vector<int>, int> ids;
-    std::vector<std::vector<int>> subsets;
-    auto addState = [&](const std::vector<int>& s) {
-        auto it = ids.find(s);
-        if (it != ids.end()) return it->second;
-        int id = static_cast<int>(subsets.size());
-        ids.emplace(s, id);
-        subsets.push_back(s);
-        return id;
-    };
-    addState(closure(st, {frag.start}));
-
-    std::vector<int> trans;
-    for (size_t i = 0; i < subsets.size(); i++) {
-        if (subsets.size() > MAX_DFA_STATES)
-            throw MotifError{"pattern too complex: DFA exceeds 50000 states", 0};
-        std::vector<int> cur = subsets[i];
-        for (int c = 0; c < K; c++) {
-            std::vector<int> moved;
-            for (int s : cur)
-                if (st[s].isChar && st[s].chars[reps[c]]) moved.push_back(st[s].to);
-            trans.push_back(moved.empty() ? -1 : addState(closure(st, moved)));
-        }
-    }
-    const int n = static_cast<int>(subsets.size());
-    dfa->dfaStatesRaw = n;
-
-    std::vector<char> acc(n, 0);
-    for (int i = 0; i < n; i++)
-        acc[i] = std::binary_search(subsets[i].begin(), subsets[i].end(), frag.end);
-
-    // --- minimisation (Moore partition refinement) ---
-    std::vector<int> cls(n);
-    for (int i = 0; i < n; i++) cls[i] = acc[i] ? 1 : 0;
-    size_t count = 0;
-    while (true) {
-        std::map<std::vector<int>, int> sigIds;
-        std::vector<int> next(n);
-        for (int i = 0; i < n; i++) {
-            std::vector<int> sig(K + 1);
-            sig[0] = cls[i];
-            for (int c = 0; c < K; c++) {
-                int t = trans[i * K + c];
-                sig[c + 1] = t < 0 ? -1 : cls[t];
-            }
-            next[i] = sigIds.emplace(sig, static_cast<int>(sigIds.size())).first->second;
-        }
-        cls = next;
-        if (sigIds.size() == count) break;
-        count = sigIds.size();
-    }
-
-    // Renumber classes in BFS order from the start state, so the start state is S0.
-    std::vector<int> repState(count, -1);
-    for (int i = 0; i < n; i++) if (repState[cls[i]] < 0) repState[cls[i]] = i;
-    std::vector<int> newId(count, -1);
-    std::vector<int> order;
-    newId[cls[0]] = 0;
-    order.push_back(cls[0]);
-    for (size_t q = 0; q < order.size(); q++) {
-        int rep = repState[order[q]];
-        for (int c = 0; c < K; c++) {
-            int t = trans[rep * K + c];
-            if (t < 0) continue;
-            int tc = cls[t];
-            if (newId[tc] < 0) { newId[tc] = static_cast<int>(order.size()); order.push_back(tc); }
-        }
-    }
-    for (int cl : order) {
-        int rep = repState[cl];
-        dfa->accepting.push_back(acc[rep]);
-        for (int c = 0; c < K; c++) {
-            int t = trans[rep * K + c];
-            dfa->trans.push_back(t < 0 ? -1 : newId[cls[t]]);
-        }
-    }
+    // --- forward DFA: subset construction, then minimisation ---
+    RawDfa raw = subsetConstruct(forwardNfa(st, frag), reps, false, MAX_DFA_STATES);
+    dfa->dfaStatesRaw = raw.numStates();
+    RawDfa fwd = minimise(raw, K);
+    dfa->trans = fwd.trans;
+    dfa->accepting = fwd.acc;
     dfa->start = 0;
     for (int b = 0; b < 256; b++)
         dfa->startByte[b] = dfa->trans[dfa->start * K + dfa->classMap[b]] >= 0;
+
     return dfa;
 }
+
 
 // ============================================================
 // 4. Scanning
 // ============================================================
-// At each start position the DFA is run until it dies; every character costs two
-// table lookups and no backtracking. Matches are non-overlapping and leftmost; the
-// longest match is taken, or the shortest if the pattern uses a lazy quantifier.
-std::vector<long long> Dfa::findAll(const std::string& seq) const {
+ScanMode scanMode = ScanMode::Auto;
+
+// Anchored run of the forward DFA from `from`: the end of the chosen match (longest, or
+// shortest for lazy motifs), or -1 if no match starts there. Each character costs two
+// table lookups and there is no backtracking. `steps` accumulates the characters consumed.
+long long Dfa::matchEnd(const std::string& seq, size_t from, size_t* steps) const {
+    const int K = numClasses;
+    const size_t n = seq.size();
+    int state = start;
+    long long last = -1;
+    size_t j = from;
+    while (j < n) {
+        state = trans[state * K + classMap[static_cast<unsigned char>(seq[j])]];
+        if (state < 0) break;
+        j++;
+        if (accepting[state]) {
+            last = static_cast<long long>(j);
+            if (shortest) break;
+        }
+    }
+    if (steps) *steps += j - from;
+    return last;
+}
+
+// Builds the reverse unanchored DFA on first use. Returns false if it would be too large.
+bool Dfa::ensureReverse() const {
+    if (reverseState != 0) return reverseState > 0;
+    try {
+        MotifParser parser(pattern);
+        MPtr ast = parser.parse();
+        NfaBuilder nb;
+        Frag frag = nb.build(*ast);
+        std::vector<int> reps(numClasses);
+        for (int c = 0; c < numClasses; c++) {
+            int b = 0;
+            while (!classChars[c][b]) b++;
+            reps[c] = b;
+        }
+        RawDfa raw = subsetConstruct(reverseNfa(nb.st, frag), reps, true, REVERSE_DFA_CAP);
+        revStatesRaw = raw.numStates();
+        RawDfa m = minimise(raw, numClasses);
+        rtrans = m.trans;
+        racc = m.acc;
+        reverseState = 1;
+    } catch (const MotifError&) {
+        reverseState = -1;
+    }
+    return reverseState > 0;
+}
+
+// Linear scan, O(n) plus the match lengths: one right-to-left pass with the reverse DFA marks
+// every position where some match starts; the forward DFA then runs only from marked positions.
+std::vector<long long> Dfa::scanLinear(const std::string& seq) const {
     std::vector<long long> out;
     const size_t n = seq.size();
     const int K = numClasses;
+    std::vector<unsigned char> isStart(n);
+    int state = 0;
+    for (size_t i = n; i-- > 0;) {
+        state = rtrans[state * K + classMap[static_cast<unsigned char>(seq[i])]];
+        isStart[i] = static_cast<unsigned char>(racc[state]);
+    }
     size_t i = 0;
     while (i < n) {
-        // Fast skip over bytes that cannot start a match.
-        while (i < n && !startByte[static_cast<unsigned char>(seq[i])]) i++;
+        while (i < n && !isStart[i]) i++;
         if (i >= n) break;
-        int state = start;
-        size_t j = i;
-        long long lastEnd = -1;
-        while (j < n) {
-            state = trans[state * K + classMap[static_cast<unsigned char>(seq[j])]];
-            if (state < 0) break;
-            j++;
-            if (accepting[state]) {
-                lastEnd = static_cast<long long>(j);
-                if (shortest) break;
-            }
-        }
-        if (lastEnd > static_cast<long long>(i)) {
-            out.push_back(static_cast<long long>(i));
-            i = static_cast<size_t>(lastEnd);
-        } else {
-            i++;
-        }
+        long long end = matchEnd(seq, i);
+        if (end > static_cast<long long>(i)) { out.push_back(static_cast<long long>(i)); i = static_cast<size_t>(end); }
+        else i++;
     }
     return out;
 }
+
+// Restart scan: the forward DFA is restarted at every byte that can begin a match. It is very
+// fast on ordinary input, but patterns with long partial matches can cost O(n x m). It stops
+// early and sets `exceeded` if the forward work passes `budget`.
+std::vector<long long> Dfa::scanRestart(const std::string& seq, size_t budget, bool& exceeded) const {
+    std::vector<long long> out;
+    const size_t n = seq.size();
+    size_t work = 0;
+    exceeded = false;
+    size_t i = 0;
+    while (i < n) {
+        while (i < n && !startByte[static_cast<unsigned char>(seq[i])]) i++;  // cannot start a match
+        if (i >= n) break;
+        long long end = matchEnd(seq, i, &work);
+        if (work > budget) { exceeded = true; return out; }
+        if (end > static_cast<long long>(i)) { out.push_back(static_cast<long long>(i)); i = static_cast<size_t>(end); }
+        else i++;
+    }
+    return out;
+}
+
+// Non-overlapping, leftmost matches. By default (Auto) the restart scan runs with a work budget
+// of 16 x the input length; if a pattern/input pair is adversarial and exhausts it, the scan
+// switches to the linear algorithm, which bounds the total work by O(n).
+std::vector<long long> Dfa::findAll(const std::string& seq) const {
+    if (seq.empty()) return {};
+    bool exceeded = false;
+    if (scanMode == ScanMode::Linear) {
+        if (ensureReverse()) return scanLinear(seq);
+        return scanRestart(seq, SIZE_MAX, exceeded);
+    }
+    if (scanMode == ScanMode::Restart) return scanRestart(seq, SIZE_MAX, exceeded);
+
+    std::vector<long long> out = scanRestart(seq, 16 * seq.size() + 4096, exceeded);
+    if (!exceeded) return out;
+    if (ensureReverse()) return scanLinear(seq);
+    return scanRestart(seq, SIZE_MAX, exceeded);  // reverse DFA too large: accept the restart cost
+}
+
 
 // ============================================================
 // 5. Pretty printer for --dfa
@@ -536,6 +672,8 @@ void Dfa::dump(std::ostream& os) const {
     os << "  NFA states       : " << nfaStates << "\n";
     os << "  DFA states       : " << dfaStatesRaw << " -> " << numStates() << " after minimisation\n";
     os << "  alphabet classes : " << numClasses << "\n";
+    os << "  scan strategy    : restart scan; switches to a linear single-pass scan (reverse DFA,\n"
+       << "                     built on demand) if the work exceeds 16 x the input length\n";
     os << "  transitions:\n";
 
     const int limit = 60;

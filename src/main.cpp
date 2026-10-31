@@ -23,10 +23,13 @@ int main(int argc, char** argv) {
         else if (std::strcmp(argv[i], "--check") == 0) checkOnly = true;
         else if (std::strcmp(argv[i], "--dfa") == 0) showDfa = true;
         else if (std::strcmp(argv[i], "--time") == 0) timing = true;
+        else if (std::strcmp(argv[i], "--scan=restart") == 0) scanMode = ScanMode::Restart;
+        else if (std::strcmp(argv[i], "--scan=linear") == 0) scanMode = ScanMode::Linear;
+        else if (std::strcmp(argv[i], "--scan=auto") == 0) scanMode = ScanMode::Auto;
         else path = argv[i];
     }
     if (!path) {
-        std::cerr << "usage: biolang [--tokens | --ast | --check | --dfa | --time] <file.bl>\n";
+        std::cerr << "usage: biolang [--tokens | --ast | --check | --dfa | --time | --scan=auto|linear|restart] <file.bl>\n";
         return 1;
     }
 
