@@ -1,0 +1,6 @@
+# The lazy pattern accepts an in-frame stop codon inside the ORF; the <sense> pattern does not
+dna genome = "ATGAAATAACCCCCCCCCCCCCCCCCCCCCCCCCCCTGA"
+motif lazy = /ATG(...){10,}?(TAA|TAG|TGA)/
+motif strict = /ATG(<sense>){10,}<stop>/
+print(count(find_all(lazy in genome)))
+print(count(find_all(strict in genome)))

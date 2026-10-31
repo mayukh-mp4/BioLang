@@ -30,6 +30,7 @@ private:
     void synchronize();
 
     StmtPtr parseStatement();
+    Block parseBlock();
     ExprPtr parseExpr();
     ExprPtr parseAdditive();
     ExprPtr parseTerm();

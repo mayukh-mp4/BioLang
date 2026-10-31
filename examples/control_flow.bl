@@ -1,0 +1,10 @@
+dna genome = "GGATGAAACCCGGGTTTAAACCCGGGTTTAAACCCTAAGG"
+motif orf = /ATG(<sense>){10,}<stop>/
+if count(find_all(orf in genome)) > 0 {
+    print("ORF found at:")
+    for pos in find_all(orf in genome) {
+        print(pos)
+    }
+} else {
+    print("no ORF")
+}

@@ -14,6 +14,21 @@ Results are also written to bench/results.csv.
 import csv, os, random, re, subprocess, sys, tempfile, time
 
 REPS = 3
+
+# BioLang codon classes and their plain-regex equivalents (for Python's re)
+MACROS = {
+    "<codon>": "(?:[ACGT][ACGT][ACGT])",
+    "<stop>": "(?:TAA|TAG|TGA)",
+    "<sense>": "(?:[ACG][ACGT][ACGT]|T(?:[CT][ACGT]|A[CT]|G[CGT]))",
+}
+
+
+def to_python(pat):
+    for k, v in MACROS.items():
+        pat = pat.replace(k, v)
+    return pat
+
+
 PATTERNS = [
     r"GAATTC",                                # EcoRI restriction site (plain literal)
     r"TATA[AT]A[AT]",                         # TATA-box-like motif
@@ -21,6 +36,7 @@ PATTERNS = [
     r"GC.{10}GC",                             # spaced motif
     r"ATG(...){10,}?(TAA|TAG|TGA)",           # ORF, >= 10 codons
     r"ATG(...){30,}?(TAA|TAG|TGA)",           # ORF, >= 30 codons
+    r"ATG(<sense>){30,}<stop>",               # strict ORF: no internal stop codon
 ]
 
 
@@ -52,7 +68,7 @@ def make_synthetic(mbp, outdir):
 
 
 def bench_python(pat, seq):
-    rx = re.compile(pat)
+    rx = re.compile(to_python(pat))
     best, count = None, 0
     for _ in range(REPS):
         t = time.perf_counter()

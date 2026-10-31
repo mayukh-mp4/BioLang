@@ -9,6 +9,21 @@ exe = sys.argv[1] if len(sys.argv) > 1 else ("build/biolang.exe" if os.name == "
 
 # Patterns chosen so that Python's backtracking rules and BioLang's DFA rules
 # (leftmost, longest - or shortest for lazy) give the same match.
+
+# BioLang codon classes and their plain-regex equivalents (for Python's re)
+MACROS = {
+    "<codon>": "(?:[ACGT][ACGT][ACGT])",
+    "<stop>": "(?:TAA|TAG|TGA)",
+    "<sense>": "(?:[ACG][ACGT][ACGT]|T(?:[CT][ACGT]|A[CT]|G[CGT]))",
+}
+
+
+def to_python(pat):
+    for k, v in MACROS.items():
+        pat = pat.replace(k, v)
+    return pat
+
+
 PATTERNS = [
     r"GAG",
     r"A[CG]T",
@@ -20,6 +35,10 @@ PATTERNS = [
     r"TA(T|C)+G",
     r"ATG(...){2,}?(TAA|TAG|TGA)",
     r"ATG(...){10,}?(TAA|TAG|TGA)",
+    r"ATG(<sense>){2,}<stop>",
+    r"ATG(<sense>){10,}<stop>",
+    r"<codon>{4}<stop>",
+    r"A(<sense>)*<stop>",
 ]
 
 random.seed(42)
@@ -32,7 +51,7 @@ for pat in PATTERNS:
         f.write(f'dna g = "{seq}"\nmotif m = /{pat}/\nprint(find_all(m in g))\n')
     res = subprocess.run([exe, path], capture_output=True, text=True)
     got = res.stdout.strip()
-    want = "[" + ", ".join(str(m.start()) for m in re.finditer(pat, seq) if m.end() > m.start()) + "]"
+    want = "[" + ", ".join(str(m.start()) for m in re.finditer(to_python(pat), seq) if m.end() > m.start()) + "]"
     ok = got == want
     failed += not ok
     n = want.count(",") + 1 if want != "[]" else 0

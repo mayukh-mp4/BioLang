@@ -121,6 +121,39 @@ struct ExprStmt : Stmt {
     }
 };
 
+using Block = std::vector<StmtPtr>;
+
+struct IfStmt : Stmt {
+    ExprPtr cond;
+    Block thenBody, elseBody;
+    IfStmt(ExprPtr c, Block t, Block e, int l, int col)
+        : Stmt(l, col), cond(std::move(c)), thenBody(std::move(t)), elseBody(std::move(e)) {}
+    void print(int d) const override {
+        indent(d); std::cout << "If\n";
+        cond->print(d + 1);
+        indent(d + 1); std::cout << "Then\n";
+        for (const auto& s : thenBody) s->print(d + 2);
+        if (!elseBody.empty()) {
+            indent(d + 1); std::cout << "Else\n";
+            for (const auto& s : elseBody) s->print(d + 2);
+        }
+    }
+};
+
+struct ForStmt : Stmt {
+    std::string var;
+    ExprPtr iter;
+    Block body;
+    ForStmt(std::string v, ExprPtr it, Block b, int l, int c)
+        : Stmt(l, c), var(std::move(v)), iter(std::move(it)), body(std::move(b)) {}
+    void print(int d) const override {
+        indent(d); std::cout << "For " << var << " in\n";
+        iter->print(d + 1);
+        indent(d + 1); std::cout << "Body\n";
+        for (const auto& s : body) s->print(d + 2);
+    }
+};
+
 struct Program {
     std::vector<StmtPtr> stmts;
     void print() const {

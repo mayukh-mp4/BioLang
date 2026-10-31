@@ -130,7 +130,29 @@ void TypeChecker::checkStmt(const Stmt& s) {
         typeOf(*p->expr);
     } else if (const auto* e = dynamic_cast<const ExprStmt*>(&s)) {
         typeOf(*e->expr);
+    } else if (const auto* i = dynamic_cast<const IfStmt*>(&s)) {
+        Type c = typeOf(*i->cond);
+        if (c != Type::UNKNOWN && c != Type::BOOL)
+            error(*i->cond, std::string("if condition must be bool, got ") + typeName(c));
+        checkBlock(i->thenBody);
+        checkBlock(i->elseBody);
+    } else if (const auto* f = dynamic_cast<const ForStmt*>(&s)) {
+        Type t = typeOf(*f->iter);
+        if (t != Type::UNKNOWN && t != Type::LIST_INT)
+            error(*f->iter, std::string("for loop expects list<int>, got ") + typeName(t));
+        auto saved = symbols_;
+        if (symbols_.count(f->var)) error(*f, "loop variable '" + f->var + "' is already declared");
+        symbols_[f->var] = Type::INT;
+        for (const auto& st : f->body) checkStmt(*st);
+        symbols_ = saved;
     }
+}
+
+// Variables declared inside a block are not visible after it.
+void TypeChecker::checkBlock(const std::vector<StmtPtr>& body) {
+    auto saved = symbols_;
+    for (const auto& st : body) checkStmt(*st);
+    symbols_ = saved;
 }
 
 Type TypeChecker::typeOf(const Expr& e) {
@@ -182,7 +204,7 @@ Type TypeChecker::typeOfBinary(const Binary& b) {
         error(b, "operator '" + op + "' cannot be applied to " + pair);
         return Type::UNKNOWN;
     }
-    if (op == "==") {
+    if (op == "==" || op == "!=") {
         if (l == r || (isNumeric(l) && isNumeric(r))) return Type::BOOL;
         error(b, std::string("cannot compare ") + typeName(l) + " with " + typeName(r) +
                      ": incompatible types");

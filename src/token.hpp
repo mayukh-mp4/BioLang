@@ -9,8 +9,8 @@ enum class TokType {
     // literals / names
     IDENT, STRING, NUMBER, REGEX,
     // operators and punctuation
-    ASSIGN, PLUS, MINUS, STAR, SLASH, EQ, LT, GT,
-    LPAREN, RPAREN, COMMA, NEWLINE,
+    ASSIGN, PLUS, MINUS, STAR, SLASH, EQ, NE, LT, GT, LE, GE,
+    LPAREN, RPAREN, LBRACE, RBRACE, COMMA, NEWLINE,
     // special
     END, ERROR
 };
@@ -48,6 +48,11 @@ inline const char* tokName(TokType t) {
         case TokType::EQ:         return "EQ";
         case TokType::LT:         return "LT";
         case TokType::GT:         return "GT";
+        case TokType::NE:         return "NE";
+        case TokType::LE:         return "LE";
+        case TokType::GE:         return "GE";
+        case TokType::LBRACE:     return "LBRACE";
+        case TokType::RBRACE:     return "RBRACE";
         case TokType::LPAREN:     return "LPAREN";
         case TokType::RPAREN:     return "RPAREN";
         case TokType::COMMA:      return "COMMA";

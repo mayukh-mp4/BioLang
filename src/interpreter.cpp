@@ -168,6 +168,15 @@ void Interpreter::exec(const Stmt& s) {
         std::cout << show(eval(*p->expr)) << "\n";
     } else if (const auto* e = dynamic_cast<const ExprStmt*>(&s)) {
         eval(*e->expr);
+    } else if (const auto* i = dynamic_cast<const IfStmt*>(&s)) {
+        Value c = eval(*i->cond);
+        for (const auto& st : c.b ? i->thenBody : i->elseBody) exec(*st);
+    } else if (const auto* f = dynamic_cast<const ForStmt*>(&s)) {
+        Value it = eval(*f->iter);
+        for (long long v : it.list) {
+            env_[f->var] = makeInt(v);
+            for (const auto& st : f->body) exec(*st);
+        }
     }
 }
 
@@ -192,13 +201,16 @@ Value Interpreter::evalBinary(const Binary& b) {
     Value l = eval(*b.lhs), r = eval(*b.rhs);
     const std::string& op = b.op;
 
-    if (op == "==") {
-        if (isNum(l) && isNum(r)) return makeBool(toD(l) == toD(r));
-        if (l.type == Type::BOOL) return makeBool(l.b == r.b);
-        return makeBool(l.s == r.s);
+    if (op == "==" || op == "!=") {
+        bool eq = (isNum(l) && isNum(r)) ? toD(l) == toD(r)
+                : (l.type == Type::BOOL) ? l.b == r.b
+                                         : l.s == r.s;
+        return makeBool(op == "==" ? eq : !eq);
     }
-    if (op == "<") return makeBool(toD(l) < toD(r));
-    if (op == ">") return makeBool(toD(l) > toD(r));
+    if (op == "<")  return makeBool(toD(l) < toD(r));
+    if (op == ">")  return makeBool(toD(l) > toD(r));
+    if (op == "<=") return makeBool(toD(l) <= toD(r));
+    if (op == ">=") return makeBool(toD(l) >= toD(r));
 
     if (l.type == Type::INT && r.type == Type::INT) {
         if (op == "+") return makeInt(l.i + r.i);

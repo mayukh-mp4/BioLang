@@ -1,0 +1,7 @@
+# Search both strands: the ORF is on the reverse strand of this genome
+dna source = "GGATGAAACCCGGGTTTAAACCCGGGTTTAAACCCTAAGG"
+dna genome = revcomp(source)
+dna reverse = revcomp(genome)
+motif orf = /ATG(<sense>){10,}<stop>/
+print(count(find_all(orf in genome)))
+print(count(find_all(orf in reverse)))

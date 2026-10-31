@@ -67,8 +67,51 @@ Program Parser::parseProgram() {
     return prog;
 }
 
+// block = '{' { statement } '}'   (the closing brace may follow a statement on the same line)
+Block Parser::parseBlock() {
+    expect(TokType::LBRACE, "'{'");
+    Block body;
+    skipNewlines();
+    while (!check(TokType::RBRACE) && !check(TokType::END)) {
+        try {
+            body.push_back(parseStatement());
+            if (!check(TokType::NEWLINE) && !check(TokType::RBRACE))
+                fail("expected end of line, got " + describe(peek()));
+        } catch (const ParseError& e) {
+            errors_.push_back("error at " + std::to_string(e.line) + ":" +
+                              std::to_string(e.col) + ": " + e.msg);
+            synchronize();
+        }
+        skipNewlines();
+    }
+    expect(TokType::RBRACE, "'}'");
+    return body;
+}
+
 StmtPtr Parser::parseStatement() {
     const Token& first = peek();
+
+    if (first.type == TokType::KW_IF) {
+        Token kw = advance();
+        ExprPtr cond = parseExpr();
+        Block thenBody = parseBlock();
+        Block elseBody;
+        if (match(TokType::KW_ELSE)) {
+            if (check(TokType::KW_IF)) elseBody.push_back(parseStatement());  // else if
+            else elseBody = parseBlock();
+        }
+        return std::make_unique<IfStmt>(std::move(cond), std::move(thenBody), std::move(elseBody),
+                                        kw.line, kw.col);
+    }
+
+    if (first.type == TokType::KW_FOR) {
+        Token kw = advance();
+        Token var = expect(TokType::IDENT, "a loop variable name");
+        expect(TokType::KW_IN, "'in'");
+        ExprPtr iter = parseExpr();
+        Block body = parseBlock();
+        return std::make_unique<ForStmt>(var.lexeme, std::move(iter), std::move(body), kw.line, kw.col);
+    }
 
     if (isTypeKeyword(first.type)) {
         Token typeTok = advance();
@@ -101,7 +144,8 @@ StmtPtr Parser::parseStatement() {
 // comparison = additive [ (== | < | >) additive ]
 ExprPtr Parser::parseExpr() {
     ExprPtr left = parseAdditive();
-    if (check(TokType::EQ) || check(TokType::LT) || check(TokType::GT)) {
+    if (check(TokType::EQ) || check(TokType::NE) || check(TokType::LT) || check(TokType::GT) ||
+        check(TokType::LE) || check(TokType::GE)) {
         Token op = advance();
         ExprPtr right = parseAdditive();
         return std::make_unique<Binary>(op.lexeme, std::move(left), std::move(right),

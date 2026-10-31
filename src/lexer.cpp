@@ -117,8 +117,19 @@ Token Lexer::next() {
         case '+': advance(); return make(TokType::PLUS,   "+", line, col);
         case '-': advance(); return make(TokType::MINUS,  "-", line, col);
         case '*': advance(); return make(TokType::STAR,   "*", line, col);
-        case '<': advance(); return make(TokType::LT,     "<", line, col);
-        case '>': advance(); return make(TokType::GT,     ">", line, col);
+        case '<':
+            advance();
+            if (peek() == '=') { advance(); return make(TokType::LE, "<=", line, col); }
+            return make(TokType::LT, "<", line, col);
+        case '>':
+            advance();
+            if (peek() == '=') { advance(); return make(TokType::GE, ">=", line, col); }
+            return make(TokType::GT, ">", line, col);
+        case '!':
+            if (peek(1) == '=') { advance(); advance(); return make(TokType::NE, "!=", line, col); }
+            break;
+        case '{': advance(); return make(TokType::LBRACE, "{", line, col);
+        case '}': advance(); return make(TokType::RBRACE, "}", line, col);
         case '(': advance(); return make(TokType::LPAREN, "(", line, col);
         case ')': advance(); return make(TokType::RPAREN, ")", line, col);
         case ',': advance(); return make(TokType::COMMA,  ",", line, col);

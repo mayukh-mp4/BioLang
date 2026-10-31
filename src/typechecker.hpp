@@ -29,6 +29,7 @@ private:
 
     void error(const Node& at, const std::string& msg);
     void checkStmt(const Stmt& s);
+    void checkBlock(const std::vector<StmtPtr>& body);
     void checkInit(Type target, const Expr& e, const std::string& varName);
     void checkAlphabet(Type target, const StringLit& lit);
     Type typeOf(const Expr& e);

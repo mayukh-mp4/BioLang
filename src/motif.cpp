@@ -21,6 +21,17 @@ using MPtr = std::unique_ptr<MNode>;
 
 const int MAX_REPEAT = 1000;
 
+// Codon classes usable inside a motif: <codon>, <sense>, <stop> (DNA alphabet).
+// <sense> is every codon except the three stop codons TAA, TAG and TGA.
+const std::map<std::string, std::string>& codonClasses() {
+    static const std::map<std::string, std::string> table = {
+        {"codon", "[ACGT][ACGT][ACGT]"},
+        {"stop",  "(TAA|TAG|TGA)"},
+        {"sense", "([ACG][ACGT][ACGT]|T([CT][ACGT]|A[CT]|G[CGT]))"},
+    };
+    return table;
+}
+
 class MotifParser {
 public:
     explicit MotifParser(const std::string& s) : s_(s) {}
@@ -139,6 +150,17 @@ private:
             return n;
         }
         if (c == '[') return parseClass();
+        if (c == '<') {
+            size_t close = s_.find('>', pos_);
+            if (close == std::string::npos) fail("missing '>' after '<'");
+            std::string name = s_.substr(pos_ + 1, close - pos_ - 1);
+            auto it = codonClasses().find(name);
+            if (it == codonClasses().end())
+                fail("unknown codon class <" + name + "> (use <codon>, <sense> or <stop>)");
+            pos_ = close + 1;
+            MotifParser sub(it->second);
+            return sub.parse();
+        }
         if (c == '.') {
             pos_++;
             MPtr n = make(MNode::CHARS);
